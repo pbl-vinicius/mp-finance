@@ -606,7 +606,13 @@ function renderGastos() {
   const cats = Object.entries(dashData.categorias||{}).sort(([,a],[,b])=>b-a);
   const total = cats.reduce((s,[,v])=>s+v,0)||1;
   const max = cats[0]?.[1]||1;
-  const top10 = cats.slice(0,10);
+
+  const isAluguel = t => /aluguel/i.test(t.descricao||'') || /aluguel/i.test(t.categoria||'');
+  const top10 = (dashData.transacoes||[])
+    .filter(t => t.valor > 0 && !isAluguel(t))
+    .sort((a,b) => b.valor - a.valor)
+    .slice(0, 10);
+
   document.getElementById('gastos-body').innerHTML = `
     <div class="s-hero">
       <div class="s-hero-val">R$ ${fmt(total)}</div>
@@ -625,18 +631,20 @@ function renderGastos() {
           <div class="l-val-sub">${Math.round(val/total*100)}%</div>
         </div>
       </div>`).join('')}
-    <div class="s-label">Top 10 mais caros</div>
-    ${top10.map(([nome,val],i)=>`
+    <div class="s-label">Top 10 compras mais caras</div>
+    ${top10.length ? top10.map((t,i)=>`
       <div class="l-row">
         <div class="l-left">
-          <div class="l-title">${esc(nome)}</div>
-          <div class="l-sub">#${i+1} maior gasto</div>
+          <div class="l-title">${esc(t.descricao)}</div>
+          <div class="l-sub">${esc(t.categoria||'')}${t.data?' · '+esc(t.data):''}</div>
         </div>
         <div class="l-right">
-          <div class="l-val">R$ ${fmt(val)}</div>
+          <div class="l-val">R$ ${fmt(t.valor)}</div>
         </div>
-      </div>`).join('')}`;
+      </div>`).join('')
+    : '<div class="empty-state">Sem transações neste mês</div>'}`;
 }
+
 
 
 function renderInvestimentos() {

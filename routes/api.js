@@ -54,6 +54,7 @@ router.get('/dashboard', async (req, res) => {
       categorias: ctx.categorias,
       investimentosDetalhe: ctx.investimentosDetalhe,
       objetivosDetalhe: ctx.objetivosDetalhe,
+      transacoes: ctx.transacoes,
       historico: ctx.historico,
     });
   } catch (err) {

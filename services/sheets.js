@@ -146,11 +146,14 @@ async function getExtrato(mesIndex = 4) {
  * Retorna um resumo rico do mês atual para o contexto da IA
  */
 async function getContextoCompleto(mesAtual = 'Mai') {
-  const [dashboard, categorias, investimentosDetalhe, objetivosDetalhe] = await Promise.all([
+  const mesesRef = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const mesIndex = mesesRef.indexOf(mesAtual);
+  const [dashboard, categorias, investimentosDetalhe, objetivosDetalhe, transacoes] = await Promise.all([
     getDashboard(),
     getCategorias(mesAtual),
     getInvestimentos(mesAtual),
     getObjetivos(mesAtual),
+    mesIndex >= 0 ? getExtrato(mesIndex) : Promise.resolve([]),
   ]);
 
   const receita              = dashboard?.['Receita']?.[mesAtual] ?? 0;
@@ -166,7 +169,7 @@ async function getContextoCompleto(mesAtual = 'Mai') {
   const metaEconomia         = dashboard?.['Quanto queremos economizar']?.[mesAtual] ?? 0;
 
   // Contexto dos últimos meses para comparação
-  const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const meses = mesesRef;
   const mesIdx = meses.indexOf(mesAtual);
   const historico = {};
   meses.slice(0, mesIdx + 1).forEach(m => {
@@ -201,6 +204,7 @@ async function getContextoCompleto(mesAtual = 'Mai') {
     categorias,
     investimentosDetalhe,
     objetivosDetalhe,
+    transacoes,
     historico,
     dataConsulta: new Date().toLocaleDateString('pt-BR'),
   };
