@@ -606,6 +606,7 @@ function renderGastos() {
   const cats = Object.entries(dashData.categorias||{}).sort(([,a],[,b])=>b-a);
   const total = cats.reduce((s,[,v])=>s+v,0)||1;
   const max = cats[0]?.[1]||1;
+  const top10 = cats.slice(0,10);
   document.getElementById('gastos-body').innerHTML = `
     <div class="s-hero">
       <div class="s-hero-val">R$ ${fmt(total)}</div>
@@ -623,8 +624,20 @@ function renderGastos() {
           <div class="l-val">R$ ${fmt(val)}</div>
           <div class="l-val-sub">${Math.round(val/total*100)}%</div>
         </div>
+      </div>`).join('')}
+    <div class="s-label">Top 10 mais caros</div>
+    ${top10.map(([nome,val],i)=>`
+      <div class="l-row">
+        <div class="l-left">
+          <div class="l-title">${esc(nome)}</div>
+          <div class="l-sub">#${i+1} maior gasto</div>
+        </div>
+        <div class="l-right">
+          <div class="l-val">R$ ${fmt(val)}</div>
+        </div>
       </div>`).join('')}`;
 }
+
 
 function renderInvestimentos() {
   if (!dashData) return;
