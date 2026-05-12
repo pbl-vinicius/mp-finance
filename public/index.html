@@ -27,7 +27,7 @@
   --green:   #22c55e;
   --orange:  #f97316;
   --nav-h:   72px;
-  --nav-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  --nav-bottom: max(8px, env(safe-area-inset-bottom, 8px));
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; background: var(--bg); color: var(--t1); font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; overflow: hidden; }
