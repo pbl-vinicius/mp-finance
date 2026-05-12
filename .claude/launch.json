@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "M&P Finance (dev)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "/Users/pablo/Documents/Claude/App Finanças",
+      "port": 3000
+    },
+    {
+      "name": "M&P Finance (prod)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "cwd": "/Users/pablo/Documents/Claude/App Finanças",
+      "port": 3000
+    }
+  ]
+}
