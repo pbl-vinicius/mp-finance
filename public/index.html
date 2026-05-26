@@ -576,7 +576,7 @@ function renderHome(d) {
       <div class="ring-center">
         <div class="ring-sub">Saldo restante para ${dias} dias</div>
         <div class="ring-val" style="color:${color}">${saldoFmt}</div>
-        <div class="ring-status" style="color:rgba(255,255,255,0.35)">${isOver ? 'Acima da receita do mês' : ''}</div>
+        <div style="color:rgba(255,255,255,0.5);font-size:13px;margin-top:2px">${isOver ? 'Acima da receita do mês' : 'R$ ' + fmt(d.limiteDiario) + '/dia'}</div>
       </div>
     </div>
 
