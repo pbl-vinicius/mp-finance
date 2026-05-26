@@ -200,7 +200,7 @@ async function getContextoCompleto(mesAtual = 'Mai') {
     totalGasto,
     balanco,
     metaEconomia,
-    saldoRestante: receita - totalGasto,
+    saldoRestante: balanco - metaEconomia,
     categorias,
     investimentosDetalhe,
     objetivosDetalhe,
