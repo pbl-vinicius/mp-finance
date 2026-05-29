@@ -124,7 +124,7 @@ router.get('/dashboard', async (req, res) => {
       transacoes: ctx.transacoes,
       historico: ctx.historico,
       gastoPorCategoria,
-      metasCategorias,
+      sugestoesMetas: metasCategorias,
       diasDecorridos,
     });
   } catch (err) {
@@ -197,10 +197,12 @@ router.post('/simulate', async (req, res) => {
   }
 });
 
-// ─── GET /api/metas-forecast ─────────────────────────────
-// Previsão inteligente de gastos por categoria via IA (Haiku)
-router.get('/metas-forecast', async (req, res) => {
+// ─── POST /api/metas-forecast ────────────────────────────
+// Previsão inteligente de gastos por categoria via IA (Haiku).
+// Recebe { goals: { "Categoria": 500, ... } } — metas definidas pelo usuário.
+router.post('/metas-forecast', async (req, res) => {
   try {
+    const userGoals = req.body?.goals || {};
     const ctx = await getCtx();
     const diasRestantes = getDiasRestantes();
     const diasDecorridos = getDiasDecorridos();
@@ -214,22 +216,10 @@ router.get('/metas-forecast', async (req, res) => {
       }
     });
 
-    const mesIdx = MESES.indexOf(ctx.mesAtual);
-    const prevMonths = MESES.slice(Math.max(0, mesIdx - 3), mesIdx);
-    const metasCategorias = {};
-    Object.keys(ctx.categoriasHistorico || {}).forEach(nome => {
-      const vals = prevMonths
-        .map(m => (ctx.categoriasHistorico[nome]?.[m] || 0))
-        .filter(v => v > 0);
-      metasCategorias[nome] = vals.length > 0
-        ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length)
-        : 0;
-    });
-
     const catsParaAnalise = Object.keys(gastoPorCategoria)
       .filter(nome => (gastoPorCategoria[nome] || 0) > 0)
       .map(nome => {
-        const meta = metasCategorias[nome] || 0;
+        const meta = userGoals[nome] || 0;
         const gasto = gastoPorCategoria[nome] || 0;
         const projecao = Math.round(gasto / diasDecorridos * totalDias);
         return { nome, meta, gasto, projecao, riscoPct: meta > 0 ? projecao / meta : 0 };

@@ -321,7 +321,8 @@ html, body { height: 100%; background: var(--bg); color: var(--t1); font-family:
 .goals-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
 .goals-lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--t3); }
 .goals-ai-tag { font-size:11px; font-weight:600; color:var(--purple-l); background:rgba(139,92,246,0.13); padding:3px 10px; border-radius:20px; }
-.goal-item { padding:16px 0; }
+.goal-item { padding:16px 0; cursor:pointer; -webkit-tap-highlight-color:transparent; transition:opacity .12s; }
+.goal-item:active { opacity:0.6; }
 .goal-item + .goal-item { border-top:1px solid var(--border); }
 .goal-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
 .goal-name-grp { display:flex; align-items:center; gap:10px; min-width:0; flex:1; }
@@ -346,6 +347,12 @@ html, body { height: 100%; background: var(--bg); color: var(--t1); font-family:
 .goals-ai-sub b { color:var(--t2); font-weight:500; }
 .sk-line { border-radius:6px; background:linear-gradient(90deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.1) 50%,rgba(255,255,255,.04) 100%); background-size:200% 100%; animation:sk 1.5s ease-in-out infinite; }
 @keyframes sk { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+/* bottom sheet */
+.meta-sheet-backdrop { position:fixed; inset:0; z-index:300; background:rgba(0,0,0,0.78); display:flex; align-items:flex-end; justify-content:center; }
+.meta-sheet-box { background:#111; border-radius:24px 24px 0 0; padding:24px 24px calc(32px + env(safe-area-inset-bottom,0px)); width:100%; max-width:430px; }
+.meta-sheet-cat { font-size:22px; font-weight:800; letter-spacing:-.5px; margin:8px 0 24px; }
+.meta-sheet-sug { font-size:12px; color:var(--t3); margin-top:8px; min-height:14px; }
+.meta-sheet-rem { width:100%; padding:14px; background:none; border:none; color:var(--t3); font-size:14px; cursor:pointer; margin-top:8px; font-family:inherit; }
 </style>
 </head>
 <body>
@@ -496,6 +503,20 @@ html, body { height: 100%; background: var(--bg); color: var(--t1); font-family:
 
     </div>
 
+  </div>
+
+  <!-- ── Bottom sheet: definir meta de gasto ── -->
+  <div id="meta-sheet" class="meta-sheet-backdrop" style="display:none" onclick="closeMeta(event)">
+    <div class="meta-sheet-box" onclick="event.stopPropagation()">
+      <div class="goals-lbl" style="margin-bottom:6px">Meta de gasto</div>
+      <div class="meta-sheet-cat" id="meta-sheet-cat"></div>
+      <label class="f-lbl">Valor mensal</label>
+      <input class="f-inp" id="meta-sheet-inp" type="number" inputmode="numeric" placeholder="R$ 0"
+        onkeydown="if(event.key==='Enter')saveMeta()"/>
+      <div class="meta-sheet-sug" id="meta-sheet-sug"></div>
+      <button class="f-btn" onclick="saveMeta()">Salvar meta</button>
+      <button class="meta-sheet-rem" id="meta-sheet-rem" onclick="removeMeta()">Remover meta</button>
+    </div>
   </div>
 
   <!-- ── Floating Nav ────────────────────────── -->
@@ -862,72 +883,135 @@ async function testTelegram() {
 }
 
 // ── Metas de Gastos ──────────────────────────────────────────
+const METAS_KEY = 'dindin_metas';
 let goalsExpanded = false;
 const GOALS_LIMIT = 5;
 
+function getMetasLocais() {
+  try { return JSON.parse(localStorage.getItem(METAS_KEY) || '{}'); } catch { return {}; }
+}
+
+function salvarMetaLocal(cat, val) {
+  const m = getMetasLocais();
+  if (val > 0) m[cat] = val; else delete m[cat];
+  localStorage.setItem(METAS_KEY, JSON.stringify(m));
+}
+
+let metaSheetCat = null;
+
+function openMeta(cat, sugestao) {
+  metaSheetCat = cat;
+  const m = getMetasLocais();
+  document.getElementById('meta-sheet-cat').textContent = cat;
+  document.getElementById('meta-sheet-inp').value = m[cat] > 0 ? m[cat] : '';
+  const sug = document.getElementById('meta-sheet-sug');
+  sug.textContent = sugestao > 0 ? `Sugestão: ${fmtK(sugestao)} (média 3 meses)` : '';
+  const rem = document.getElementById('meta-sheet-rem');
+  rem.style.display = m[cat] > 0 ? '' : 'none';
+  document.getElementById('meta-sheet').style.display = 'flex';
+  setTimeout(() => document.getElementById('meta-sheet-inp').focus(), 150);
+}
+
+function closeMeta(e) {
+  if (e && e.currentTarget !== e.target) return;
+  document.getElementById('meta-sheet').style.display = 'none';
+  metaSheetCat = null;
+}
+
+function saveMeta() {
+  if (!metaSheetCat) return;
+  const val = parseFloat(document.getElementById('meta-sheet-inp').value);
+  salvarMetaLocal(metaSheetCat, isNaN(val) || val <= 0 ? 0 : Math.round(val));
+  document.getElementById('meta-sheet').style.display = 'none';
+  metaSheetCat = null;
+  if (dashData) renderHome(dashData);
+}
+
+function removeMeta() {
+  if (!metaSheetCat) return;
+  salvarMetaLocal(metaSheetCat, 0);
+  document.getElementById('meta-sheet').style.display = 'none';
+  metaSheetCat = null;
+  if (dashData) renderHome(dashData);
+}
+
 function renderGoals(d) {
   const gpc = d.gastoPorCategoria || {};
-  const metas = d.metasCategorias || {};
+  const sugestoes = d.sugestoesMetas || {};
+  const metasLocais = getMetasLocais();
   const catNames = Object.keys(d.categorias || {});
   const dec = Math.max(1, d.diasDecorridos || 1);
   const totalDias = Math.max(1, dec + (d.diasRestantes || 30) - 1);
 
-  const items = Object.keys(gpc)
-    .filter(nome => (gpc[nome] || 0) > 0)
-    .map(nome => {
-      const gasto = gpc[nome] || 0;
-      const meta = metas[nome] || 0;
-      const pct = meta > 0 ? Math.min(150, Math.round(gasto / meta * 100)) : 0;
-      const projecao = Math.round(gasto / dec * totalDias);
-      return { nome, gasto, meta, pct, projecao, projecaoPct: meta > 0 ? projecao / meta : 0 };
-    })
-    .sort((a, b) => {
-      const aScore = a.meta > 0 ? a.pct : -1;
-      const bScore = b.meta > 0 ? b.pct : -1;
-      return bScore !== aScore ? bScore - aScore : b.gasto - a.gasto;
-    });
+  // Mostra categorias onde há gasto OU meta definida pelo usuário
+  const nomes = new Set([
+    ...Object.keys(gpc).filter(n => (gpc[n] || 0) > 0),
+    ...Object.keys(metasLocais).filter(n => metasLocais[n] > 0),
+  ]);
+
+  const items = Array.from(nomes).map(nome => {
+    const gasto = gpc[nome] || 0;
+    const meta = metasLocais[nome] || 0;
+    const sugestao = sugestoes[nome] || 0;
+    const pct = meta > 0 ? Math.min(150, Math.round(gasto / meta * 100)) : 0;
+    const projecao = dec > 0 ? Math.round(gasto / dec * totalDias) : gasto;
+    return { nome, gasto, meta, sugestao, pct, projecao, projecaoPct: meta > 0 ? projecao / meta : 0 };
+  }).sort((a, b) => {
+    // Com meta: ordena por % usada (desc); sem meta: ordena por valor gasto (desc)
+    if (a.meta > 0 && b.meta > 0) return b.pct - a.pct;
+    if (a.meta > 0) return -1;
+    if (b.meta > 0) return 1;
+    return b.gasto - a.gasto;
+  });
 
   if (!items.length) return '';
 
   const itemsHtml = items.map((item, i) => {
     const catIdx = catNames.indexOf(item.nome);
     const color = CAT_COLORS[(catIdx >= 0 ? catIdx : i) % 8];
-    const barColor = item.pct >= 100 ? 'var(--red)' : item.pct >= 80 ? 'var(--orange)' : color;
-    const pctColor = item.pct >= 100 ? 'var(--red)' : item.pct >= 80 ? 'var(--orange)' : color;
+    const hidden = i >= GOALS_LIMIT && !goalsExpanded;
 
-    const fcHtml = item.meta > 0
-      ? item.projecaoPct >= 1.15
+    const onclick = `openMeta('${esc(item.nome)}', ${item.sugestao})`;
+
+    if (item.meta > 0) {
+      const barColor = item.pct >= 100 ? 'var(--red)' : item.pct >= 80 ? 'var(--orange)' : color;
+      const pctColor = item.pct >= 100 ? 'var(--red)' : item.pct >= 80 ? 'var(--orange)' : color;
+      const fcHtml = item.projecaoPct >= 1.15
         ? `<span class="goal-fc-over">↑ ${fmtK(item.projecao)} previsto</span>`
         : item.projecaoPct >= 0.9
           ? `<span class="goal-fc-warn">→ ${fmtK(item.projecao)} previsto</span>`
-          : `<span class="goal-fc-ok">→ ${fmtK(item.projecao)} previsto</span>`
-      : `<span class="goal-fc-dim">→ ${fmtK(item.projecao)} previsto</span>`;
+          : `<span class="goal-fc-ok">→ ${fmtK(item.projecao)} previsto</span>`;
 
-    const hidden = i >= GOALS_LIMIT && !goalsExpanded;
-    const metaHtml = item.meta > 0
-      ? ` <span style="color:var(--t3)">/ ${fmtK(item.meta)}</span>`
-      : '';
-    const barHtml = item.meta > 0
-      ? `<div class="goal-track"><div class="goal-fill" style="width:${Math.min(100,item.pct)}%;background:${barColor}"></div></div>`
-      : '';
-    const pctHtml = item.meta > 0
-      ? `<span class="goal-pct" style="color:${pctColor}">${item.pct}%</span>`
-      : '';
-
-    return `<div class="goal-item"${hidden ? ' style="display:none"' : ''}>
-      <div class="goal-top">
-        <div class="goal-name-grp">
-          <div class="goal-dot" style="background:${color}"></div>
-          <span class="goal-name">${esc(item.nome)}</span>
+      return `<div class="goal-item"${hidden ? ' style="display:none"' : ''} onclick="${onclick}">
+        <div class="goal-top">
+          <div class="goal-name-grp">
+            <div class="goal-dot" style="background:${color}"></div>
+            <span class="goal-name">${esc(item.nome)}</span>
+          </div>
+          <span class="goal-pct" style="color:${pctColor}">${item.pct}%</span>
         </div>
-        ${pctHtml}
-      </div>
-      ${barHtml}
-      <div class="goal-bot">
-        <span class="goal-spent"><b>${fmtK(item.gasto)}</b>${metaHtml}</span>
-        ${fcHtml}
-      </div>
-    </div>`;
+        <div class="goal-track"><div class="goal-fill" style="width:${Math.min(100,item.pct)}%;background:${barColor}"></div></div>
+        <div class="goal-bot">
+          <span class="goal-spent"><b>${fmtK(item.gasto)}</b> <span style="color:var(--t3)">/ ${fmtK(item.meta)}</span></span>
+          ${fcHtml}
+        </div>
+      </div>`;
+    } else {
+      // Sem meta definida — mostra gasto + convite para definir
+      return `<div class="goal-item"${hidden ? ' style="display:none"' : ''} onclick="${onclick}">
+        <div class="goal-top">
+          <div class="goal-name-grp">
+            <div class="goal-dot" style="background:${color}"></div>
+            <span class="goal-name">${esc(item.nome)}</span>
+          </div>
+          <span class="goal-fc-dim" style="font-size:13px">Definir meta →</span>
+        </div>
+        <div class="goal-bot">
+          <span class="goal-spent"><b>${fmtK(item.gasto)}</b></span>
+          <span class="goal-fc-dim">→ ${fmtK(item.projecao)} previsto</span>
+        </div>
+      </div>`;
+    }
   }).join('');
 
   const total = items.length;
@@ -935,17 +1019,19 @@ function renderGoals(d) {
     ? `<button class="goals-show-btn" id="goals-show-btn" onclick="toggleMoreGoals(${total})">Ver todas as ${total} categorias</button>`
     : '';
 
+  const hasAnyGoal = items.some(it => it.meta > 0);
+
   return `<div class="goals-section">
     <div class="goals-hdr">
       <span class="goals-lbl">Metas do mês</span>
       <span class="goals-ai-tag">✦ Previsão IA</span>
     </div>
     ${itemsHtml}
-    <div class="goals-ai-block" id="goals-ai-block">
+    ${hasAnyGoal ? `<div class="goals-ai-block" id="goals-ai-block">
       <div class="goals-ai-hdr">✦ IA</div>
       <div class="sk-line" style="height:13px;width:82%"></div>
       <div class="sk-line" style="height:13px;width:60%;margin-top:7px"></div>
-    </div>
+    </div>` : ''}
     ${showMoreHtml}
   </div>`;
 }
@@ -960,8 +1046,18 @@ function toggleMoreGoals(total) {
 }
 
 async function loadGoalsForecast() {
+  const metasLocais = getMetasLocais();
+  if (!Object.keys(metasLocais).length) {
+    const block = document.getElementById('goals-ai-block');
+    if (block) block.innerHTML = '';
+    return;
+  }
   try {
-    const res = await fetch(API + '/api/metas-forecast');
+    const res = await fetch(API + '/api/metas-forecast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goals: metasLocais }),
+    });
     if (!res.ok) throw new Error('http ' + res.status);
     const data = await res.json();
     const block = document.getElementById('goals-ai-block');
