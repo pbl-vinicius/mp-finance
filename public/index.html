@@ -313,6 +313,39 @@ html, body { height: 100%; background: var(--bg); color: var(--t1); font-family:
 .c-green  { color: var(--green); }
 .c-red    { color: var(--red); }
 .c-dim    { color: var(--t2); }
+
+/* ══════════════════════════════════════════════════
+   METAS DE GASTOS — HOME
+══════════════════════════════════════════════════ */
+.goals-section { margin-top: 32px; }
+.goals-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+.goals-lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--t3); }
+.goals-ai-tag { font-size:11px; font-weight:600; color:var(--purple-l); background:rgba(139,92,246,0.13); padding:3px 10px; border-radius:20px; }
+.goal-item { padding:16px 0; }
+.goal-item + .goal-item { border-top:1px solid var(--border); }
+.goal-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.goal-name-grp { display:flex; align-items:center; gap:10px; min-width:0; flex:1; }
+.goal-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.goal-name { font-size:15px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.goal-pct { font-size:13px; font-weight:700; flex-shrink:0; margin-left:8px; }
+.goal-track { height:4px; background:rgba(255,255,255,0.07); border-radius:20px; overflow:hidden; margin-bottom:7px; }
+.goal-fill { height:100%; border-radius:20px; transition:width 0.9s cubic-bezier(.4,0,.2,1); }
+.goal-bot { display:flex; align-items:center; justify-content:space-between; }
+.goal-spent { font-size:12px; color:var(--t2); }
+.goal-spent b { color:var(--t1); font-weight:600; }
+.goal-fc-ok   { font-size:12px; font-weight:500; color:var(--green); }
+.goal-fc-warn { font-size:12px; font-weight:500; color:var(--orange); }
+.goal-fc-over { font-size:12px; font-weight:500; color:var(--red); }
+.goal-fc-dim  { font-size:12px; font-weight:500; color:var(--t3); }
+.goals-show-btn { width:100%; padding:13px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:14px; color:var(--t2); font-size:14px; font-weight:500; cursor:pointer; font-family:inherit; margin-top:16px; }
+.goals-show-btn:active { opacity:0.7; }
+.goals-ai-block { margin-top:20px; padding:14px 16px; background:rgba(139,92,246,0.07); border:1px solid rgba(139,92,246,0.18); border-radius:16px; }
+.goals-ai-hdr { font-size:11px; font-weight:700; color:var(--purple-l); letter-spacing:0.4px; margin-bottom:8px; text-transform:uppercase; }
+.goals-ai-txt { font-size:13px; color:var(--t2); line-height:1.55; }
+.goals-ai-sub { font-size:12px; color:var(--t3); margin-top:5px; line-height:1.5; }
+.goals-ai-sub b { color:var(--t2); font-weight:500; }
+.sk-line { border-radius:6px; background:linear-gradient(90deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.1) 50%,rgba(255,255,255,.04) 100%); background-size:200% 100%; animation:sk 1.5s ease-in-out infinite; }
+@keyframes sk { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 </style>
 </head>
 <body>
@@ -548,6 +581,7 @@ async function loadHome() {
 }
 
 function renderHome(d) {
+  goalsExpanded = false;
   const isOver = d.saldoRestante < 0;
   const pct = d.pctGasto;
   const dias = d.diasRestantes;
@@ -604,7 +638,11 @@ function renderHome(d) {
         <span class="home-row-val">${metaVal}</span>
       </div>
     </div>
+
+    ${renderGoals(d)}
   `;
+
+  loadGoalsForecast();
 }
 
 // ── Sub-page renderers ───────────────────────────────────────
@@ -821,6 +859,127 @@ async function testTelegram() {
     const d=await res.json();
     document.getElementById('tg-st').textContent=d.ok?'✅ Mensagem enviada!':'❌ '+d.error;
   } catch { document.getElementById('tg-st').textContent='❌ Erro ao conectar.'; }
+}
+
+// ── Metas de Gastos ──────────────────────────────────────────
+let goalsExpanded = false;
+const GOALS_LIMIT = 5;
+
+function renderGoals(d) {
+  const gpc = d.gastoPorCategoria || {};
+  const metas = d.metasCategorias || {};
+  const catNames = Object.keys(d.categorias || {});
+  const dec = Math.max(1, d.diasDecorridos || 1);
+  const totalDias = Math.max(1, dec + (d.diasRestantes || 30) - 1);
+
+  const items = Object.keys(gpc)
+    .filter(nome => (gpc[nome] || 0) > 0)
+    .map(nome => {
+      const gasto = gpc[nome] || 0;
+      const meta = metas[nome] || 0;
+      const pct = meta > 0 ? Math.min(150, Math.round(gasto / meta * 100)) : 0;
+      const projecao = Math.round(gasto / dec * totalDias);
+      return { nome, gasto, meta, pct, projecao, projecaoPct: meta > 0 ? projecao / meta : 0 };
+    })
+    .sort((a, b) => {
+      const aScore = a.meta > 0 ? a.pct : -1;
+      const bScore = b.meta > 0 ? b.pct : -1;
+      return bScore !== aScore ? bScore - aScore : b.gasto - a.gasto;
+    });
+
+  if (!items.length) return '';
+
+  const itemsHtml = items.map((item, i) => {
+    const catIdx = catNames.indexOf(item.nome);
+    const color = CAT_COLORS[(catIdx >= 0 ? catIdx : i) % 8];
+    const barColor = item.pct >= 100 ? 'var(--red)' : item.pct >= 80 ? 'var(--orange)' : color;
+    const pctColor = item.pct >= 100 ? 'var(--red)' : item.pct >= 80 ? 'var(--orange)' : color;
+
+    const fcHtml = item.meta > 0
+      ? item.projecaoPct >= 1.15
+        ? `<span class="goal-fc-over">↑ ${fmtK(item.projecao)} previsto</span>`
+        : item.projecaoPct >= 0.9
+          ? `<span class="goal-fc-warn">→ ${fmtK(item.projecao)} previsto</span>`
+          : `<span class="goal-fc-ok">→ ${fmtK(item.projecao)} previsto</span>`
+      : `<span class="goal-fc-dim">→ ${fmtK(item.projecao)} previsto</span>`;
+
+    const hidden = i >= GOALS_LIMIT && !goalsExpanded;
+    const metaHtml = item.meta > 0
+      ? ` <span style="color:var(--t3)">/ ${fmtK(item.meta)}</span>`
+      : '';
+    const barHtml = item.meta > 0
+      ? `<div class="goal-track"><div class="goal-fill" style="width:${Math.min(100,item.pct)}%;background:${barColor}"></div></div>`
+      : '';
+    const pctHtml = item.meta > 0
+      ? `<span class="goal-pct" style="color:${pctColor}">${item.pct}%</span>`
+      : '';
+
+    return `<div class="goal-item"${hidden ? ' style="display:none"' : ''}>
+      <div class="goal-top">
+        <div class="goal-name-grp">
+          <div class="goal-dot" style="background:${color}"></div>
+          <span class="goal-name">${esc(item.nome)}</span>
+        </div>
+        ${pctHtml}
+      </div>
+      ${barHtml}
+      <div class="goal-bot">
+        <span class="goal-spent"><b>${fmtK(item.gasto)}</b>${metaHtml}</span>
+        ${fcHtml}
+      </div>
+    </div>`;
+  }).join('');
+
+  const total = items.length;
+  const showMoreHtml = total > GOALS_LIMIT
+    ? `<button class="goals-show-btn" id="goals-show-btn" onclick="toggleMoreGoals(${total})">Ver todas as ${total} categorias</button>`
+    : '';
+
+  return `<div class="goals-section">
+    <div class="goals-hdr">
+      <span class="goals-lbl">Metas do mês</span>
+      <span class="goals-ai-tag">✦ Previsão IA</span>
+    </div>
+    ${itemsHtml}
+    <div class="goals-ai-block" id="goals-ai-block">
+      <div class="goals-ai-hdr">✦ IA</div>
+      <div class="sk-line" style="height:13px;width:82%"></div>
+      <div class="sk-line" style="height:13px;width:60%;margin-top:7px"></div>
+    </div>
+    ${showMoreHtml}
+  </div>`;
+}
+
+function toggleMoreGoals(total) {
+  goalsExpanded = !goalsExpanded;
+  document.querySelectorAll('.goal-item').forEach((el, i) => {
+    if (i >= GOALS_LIMIT) el.style.display = goalsExpanded ? '' : 'none';
+  });
+  const btn = document.getElementById('goals-show-btn');
+  if (btn) btn.textContent = goalsExpanded ? 'Mostrar menos' : `Ver todas as ${total} categorias`;
+}
+
+async function loadGoalsForecast() {
+  try {
+    const res = await fetch(API + '/api/metas-forecast');
+    if (!res.ok) throw new Error('http ' + res.status);
+    const data = await res.json();
+    const block = document.getElementById('goals-ai-block');
+    if (!block) return;
+    if (!data.geral && !(data.insights && data.insights.length)) {
+      block.innerHTML = '';
+      return;
+    }
+    const subsHtml = (data.insights || []).slice(0, 3)
+      .map(ins => `<div class="goals-ai-sub">· <b>${esc(ins.categoria)}</b>: ${esc(ins.msg)}</div>`)
+      .join('');
+    block.innerHTML = `<div class="goals-ai-hdr">✦ IA diz</div>
+      <div class="goals-ai-txt">${esc(data.geral || '')}</div>
+      ${subsHtml}`;
+  } catch {
+    const block = document.getElementById('goals-ai-block');
+    if (block) block.innerHTML = '';
+  }
 }
 
 // ── Boot ─────────────────────────────────────────────────────

@@ -21,6 +21,22 @@ function getBillingMonth() {
   return day > CLOSING_DAY ? MESES[(month + 1) % 12] : MESES[month];
 }
 
+// Dias decorridos desde o início do ciclo de faturamento atual.
+function getDiasDecorridos() {
+  const now = new Date();
+  const day = now.getDate();
+  const month = now.getMonth();
+  const year = now.getFullYear();
+  let startMonth = month, startYear = year;
+  if (day <= CLOSING_DAY) {
+    startMonth = month - 1;
+    if (startMonth < 0) { startMonth = 11; startYear = year - 1; }
+  }
+  const cycleStart = new Date(startYear, startMonth, CLOSING_DAY + 1);
+  const today = new Date(year, month, day);
+  return Math.max(1, Math.floor((today - cycleStart) / 86400000) + 1);
+}
+
 // Dias restantes até o fechamento do ciclo atual (inclusive o dia de hoje).
 function getDiasRestantes() {
   const now = new Date();
@@ -58,8 +74,32 @@ router.get('/dashboard', async (req, res) => {
   try {
     const ctx = await getCtx();
     const diasRestantes = getDiasRestantes();
+    const diasDecorridos = getDiasDecorridos();
     const limiteDiario = ctx.saldoRestante > 0 ? ctx.saldoRestante / diasRestantes : 0;
     const pctGasto = ctx.receita > 0 ? (ctx.totalGasto / ctx.receita) * 100 : 0;
+    const totalDias = diasDecorridos + diasRestantes - 1;
+
+    // Gasto real por categoria a partir do extrato (transação a transação)
+    const gastoPorCategoria = {};
+    (ctx.transacoes || []).forEach(t => {
+      if (t.valor > 0 && t.categoria) {
+        const cat = t.categoria.trim();
+        gastoPorCategoria[cat] = (gastoPorCategoria[cat] || 0) + t.valor;
+      }
+    });
+
+    // Meta implícita por categoria: média dos últimos 3 meses
+    const mesIdx = MESES.indexOf(ctx.mesAtual);
+    const prevMonths = MESES.slice(Math.max(0, mesIdx - 3), mesIdx);
+    const metasCategorias = {};
+    Object.keys(ctx.categoriasHistorico || {}).forEach(nome => {
+      const vals = prevMonths
+        .map(m => (ctx.categoriasHistorico[nome]?.[m] || 0))
+        .filter(v => v > 0);
+      metasCategorias[nome] = vals.length > 0
+        ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length)
+        : 0;
+    });
 
     res.json({
       mes: ctx.mesAtual,
@@ -83,6 +123,9 @@ router.get('/dashboard', async (req, res) => {
       objetivosDetalhe: ctx.objetivosDetalhe,
       transacoes: ctx.transacoes,
       historico: ctx.historico,
+      gastoPorCategoria,
+      metasCategorias,
+      diasDecorridos,
     });
   } catch (err) {
     console.error('/api/dashboard error:', err.message);
@@ -151,6 +194,59 @@ router.post('/simulate', async (req, res) => {
   } catch (err) {
     console.error('/api/simulate error:', err.message);
     res.status(500).json({ error: 'Erro ao simular gasto.' });
+  }
+});
+
+// ─── GET /api/metas-forecast ─────────────────────────────
+// Previsão inteligente de gastos por categoria via IA (Haiku)
+router.get('/metas-forecast', async (req, res) => {
+  try {
+    const ctx = await getCtx();
+    const diasRestantes = getDiasRestantes();
+    const diasDecorridos = getDiasDecorridos();
+    const totalDias = diasDecorridos + diasRestantes - 1;
+
+    const gastoPorCategoria = {};
+    (ctx.transacoes || []).forEach(t => {
+      if (t.valor > 0 && t.categoria) {
+        const cat = t.categoria.trim();
+        gastoPorCategoria[cat] = (gastoPorCategoria[cat] || 0) + t.valor;
+      }
+    });
+
+    const mesIdx = MESES.indexOf(ctx.mesAtual);
+    const prevMonths = MESES.slice(Math.max(0, mesIdx - 3), mesIdx);
+    const metasCategorias = {};
+    Object.keys(ctx.categoriasHistorico || {}).forEach(nome => {
+      const vals = prevMonths
+        .map(m => (ctx.categoriasHistorico[nome]?.[m] || 0))
+        .filter(v => v > 0);
+      metasCategorias[nome] = vals.length > 0
+        ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length)
+        : 0;
+    });
+
+    const catsParaAnalise = Object.keys(gastoPorCategoria)
+      .filter(nome => (gastoPorCategoria[nome] || 0) > 0)
+      .map(nome => {
+        const meta = metasCategorias[nome] || 0;
+        const gasto = gastoPorCategoria[nome] || 0;
+        const projecao = Math.round(gasto / diasDecorridos * totalDias);
+        return { nome, meta, gasto, projecao, riscoPct: meta > 0 ? projecao / meta : 0 };
+      })
+      .sort((a, b) => b.riscoPct - a.riscoPct)
+      .slice(0, 6);
+
+    if (!catsParaAnalise.length) {
+      return res.json({ geral: null, insights: [] });
+    }
+
+    const { gerarPrevisaoCategorias } = require('../services/claude');
+    const result = await gerarPrevisaoCategorias(catsParaAnalise, ctx.mesAtual, diasDecorridos, diasRestantes);
+    res.json(result);
+  } catch (err) {
+    console.error('/api/metas-forecast error:', err.message);
+    res.status(500).json({ error: 'Erro ao gerar previsão.' });
   }
 });
 

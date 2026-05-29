@@ -111,6 +111,38 @@ ${JSON.stringify(contexto, null, 2)}
   }
 }
 
+/**
+ * Gera previsão de gastos por categoria para o mês atual via IA
+ */
+async function gerarPrevisaoCategorias(categorias, mes, diasDecorridos, diasRestantes) {
+  const lista = categorias
+    .map(c => `- ${c.nome}: R$${c.gasto.toFixed(0)} gastos | meta histórica R$${c.meta > 0 ? c.meta.toFixed(0) : 'N/A'} | projeção R$${c.projecao.toFixed(0)}`)
+    .join('\n');
+
+  const prompt = `Analise os gastos por categoria de ${mes} (${diasDecorridos} dias passados, ${diasRestantes} restantes):
+${lista}
+
+Responda SOMENTE com este JSON (sem texto extra):
+{"geral":"insight geral em pt-BR (máx 80 chars)","insights":[{"categoria":"nome","msg":"dica curta em pt-BR (máx 65 chars)"}]}
+
+Seja direto, empático e acionável. Máx 3 insights. Não repita números brutos.`;
+
+  try {
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 400,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const text = response.content[0]?.text || '';
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}') + 1;
+    if (start < 0 || end <= start) return { geral: null, insights: [] };
+    return JSON.parse(text.slice(start, end));
+  } catch {
+    return { geral: null, insights: [] };
+  }
+}
+
 // ─── System Prompt ──────────────────────────────────────────
 
 function buildSystemPrompt(ctx) {
@@ -162,4 +194,4 @@ function fmt(n) {
   return Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-module.exports = { chat, clearHistory, gerarInsightDiario, verificarAlertas };
+module.exports = { chat, clearHistory, gerarInsightDiario, verificarAlertas, gerarPrevisaoCategorias };

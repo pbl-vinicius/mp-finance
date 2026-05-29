@@ -111,6 +111,25 @@ async function getObjetivos(mesAtual = 'Mai') {
 }
 
 /**
+ * Retorna despesas por categoria para todos os meses do ano
+ * Returns { "Alimentação": { "Jan": 450, "Fev": 380, ... }, ... }
+ */
+async function getCategoriasHistorico() {
+  const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const rows = await readRange('Dashboard!A20:M57');
+  const historico = {};
+  rows.forEach(row => {
+    const nome = row[0];
+    if (!nome) return;
+    historico[nome] = {};
+    meses.forEach((mes, i) => {
+      historico[nome][mes] = parseBRL(row[i + 1] || '0');
+    });
+  });
+  return historico;
+}
+
+/**
  * Retorna as transações do mês especificado
  * mesIndex: 0=Jan, 1=Fev, ..., 4=Mai, etc.
  */
@@ -148,15 +167,20 @@ async function getExtrato(mesIndex = 4) {
 async function getContextoCompleto(mesAtual = 'Mai') {
   const mesesRef = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   const mesIndex = mesesRef.indexOf(mesAtual);
-  const [dashboard, categorias, investimentosDetalhe, objetivosDetalhe, transacoes] = await Promise.all([
+  const [dashboard, categoriasHistorico, investimentosDetalhe, objetivosDetalhe, transacoes] = await Promise.all([
     getDashboard(),
-    getCategorias(mesAtual),
+    getCategoriasHistorico(),
     getInvestimentos(mesAtual),
     getObjetivos(mesAtual),
     mesIndex >= 0 ? getExtrato(mesIndex) : Promise.resolve([]),
   ]);
 
-  const receita              = dashboard?.['Receita']?.[mesAtual] ?? 0;
+  const categorias = {};
+  Object.keys(categoriasHistorico).forEach(nome => {
+    categorias[nome] = categoriasHistorico[nome][mesAtual] || 0;
+  });
+
+  const receita              = dashboard?.['Receita']?.[mesAtual]             ?? 0;
   const despesasFixas        = dashboard?.['Despesas fixas']?.[mesAtual] ?? 0;
   const despesasEssenciais   = dashboard?.['Despesas essenciais']?.[mesAtual] ?? 0;
   const despesasExtras       = dashboard?.['Despesas Extras']?.[mesAtual] ?? 0;
@@ -202,6 +226,7 @@ async function getContextoCompleto(mesAtual = 'Mai') {
     metaEconomia,
     saldoRestante: balanco - metaEconomia,
     categorias,
+    categoriasHistorico,
     investimentosDetalhe,
     objetivosDetalhe,
     transacoes,
@@ -228,4 +253,4 @@ function colIndexToLetter(index) {
   return letter;
 }
 
-module.exports = { getDashboard, getCategorias, getInvestimentos, getObjetivos, getExtrato, getContextoCompleto };
+module.exports = { getDashboard, getCategorias, getCategoriasHistorico, getInvestimentos, getObjetivos, getExtrato, getContextoCompleto };
